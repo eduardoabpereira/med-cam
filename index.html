@@ -1,59 +1,514 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="pt-BR">
 <head>
-  <title>Videochamada</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>MedCam — Videochamada</title>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0a0f;
+      --surface: #12121a;
+      --border: #1e1e2e;
+      --accent: #00e5a0;
+      --accent2: #7b5ea7;
+      --red: #ff4c6a;
+      --text: #e8e8f0;
+      --muted: #5a5a7a;
+      --radius: 16px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Syne', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow-x: hidden;
+    }
+
+    /* Background grid */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 40px 40px;
+      opacity: 0.4;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(ellipse 80% 60% at 50% 0%, #00e5a015 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── LOBBY ── */
+    #lobby {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 32px;
+      padding: 40px 24px;
+      animation: fadeUp .5s ease both;
+    }
+
+    .logo {
+      font-size: 13px;
+      font-family: 'DM Mono', monospace;
+      color: var(--accent);
+      letter-spacing: 4px;
+      text-transform: uppercase;
+    }
+
+    .hero-title {
+      font-size: clamp(2.4rem, 6vw, 4rem);
+      font-weight: 800;
+      text-align: center;
+      line-height: 1.05;
+      background: linear-gradient(135deg, #fff 0%, var(--accent) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-sub {
+      color: var(--muted);
+      font-size: 15px;
+      text-align: center;
+      max-width: 380px;
+      line-height: 1.6;
+      font-family: 'DM Mono', monospace;
+    }
+
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--accent);
+      color: #000;
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 15px;
+      padding: 14px 32px;
+      border-radius: 100px;
+      border: none;
+      cursor: pointer;
+      transition: transform .15s, box-shadow .15s;
+      box-shadow: 0 0 32px #00e5a040;
+    }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 0 48px #00e5a060; }
+    .btn-primary:active { transform: translateY(0); }
+
+    /* ── CALL SCREEN ── */
+    #call-screen {
+      display: none;
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 1100px;
+      padding: 16px;
+      flex-direction: column;
+      gap: 16px;
+      animation: fadeUp .4s ease both;
+    }
+
+    .call-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 4px;
+    }
+
+    .call-logo { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--accent); letter-spacing: 3px; }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      padding: 6px 14px;
+      border-radius: 100px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+      transition: all .3s;
+    }
+    .status-badge.connected { color: var(--accent); border-color: var(--accent); background: #00e5a010; }
+    .status-badge.waiting   { color: #f59e0b; border-color: #f59e0b; background: #f59e0b10; }
+    .status-badge .dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: currentColor;
+      animation: pulse 1.5s infinite;
+    }
+
+    /* Videos */
+    .videos-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    @media (max-width: 640px) { .videos-grid { grid-template-columns: 1fr; } }
+
+    .video-card {
+      position: relative;
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      aspect-ratio: 16/9;
+    }
+
+    .video-card video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .video-label {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 2px;
+      color: #fff;
+      background: #00000080;
+      backdrop-filter: blur(8px);
+      padding: 4px 10px;
+      border-radius: 100px;
+    }
+
+    .video-placeholder {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      color: var(--muted);
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      letter-spacing: 1px;
+    }
+
+    .video-placeholder svg { opacity: .3; }
+
+    /* Bottom bar */
+    .bottom-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .share-box {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      padding: 8px 8px 8px 20px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .share-url {
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+    }
+
+    .btn-copy {
+      background: var(--border);
+      color: var(--text);
+      border: none;
+      border-radius: 100px;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 1px;
+      padding: 8px 16px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background .2s, color .2s;
+    }
+    .btn-copy:hover { background: var(--accent); color: #000; }
+    .btn-copy.copied { background: var(--accent); color: #000; }
+
+    .btn-end {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--red);
+      color: #fff;
+      border: none;
+      border-radius: 100px;
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 14px;
+      padding: 12px 24px;
+      cursor: pointer;
+      transition: opacity .2s;
+    }
+    .btn-end:hover { opacity: .85; }
+
+    /* Animations */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: .3; }
+    }
+
+    /* Toast */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--accent);
+      color: #000;
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      padding: 12px 24px;
+      border-radius: 100px;
+      transition: transform .3s cubic-bezier(.34,1.56,.64,1);
+      z-index: 100;
+      white-space: nowrap;
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); }
+  </style>
 </head>
-
 <body>
-  <h2>Minha câmera</h2>
-  <video id="meuVideo" autoplay playsinline muted></video>
 
-  <h2>Câmera remota</h2>
-  <video id="videoRemoto" autoplay playsinline></video>
+<!-- LOBBY -->
+<div id="lobby">
+  <span class="logo">● medcam</span>
+  <h1 class="hero-title">Videochamada<br>instantânea</h1>
+  <p class="hero-sub">Gere um link e compartilhe.<br>Sem cadastro. Sem instalação.</p>
+  <button class="btn-primary" onclick="criarSala()">
+    <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+      <path d="M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
+    </svg>
+    Criar sala
+  </button>
+</div>
 
-  <br>
-  <p>Meu ID: <strong id="meuId">aguardando...</strong></p>
-  <input id="idDestino" placeholder="ID de quem você quer chamar" />
-  <button onclick="ligar()">📞 Ligar</button>
+<!-- CALL SCREEN -->
+<div id="call-screen">
+  <div class="call-header">
+    <span class="call-logo">● medcam</span>
+    <span class="status-badge waiting" id="statusBadge">
+      <span class="dot"></span>
+      <span id="statusText">Aguardando...</span>
+    </span>
+  </div>
 
-  <script>
-    const peer = new Peer(); // usa servidor público do PeerJS
+  <div class="videos-grid">
+    <div class="video-card">
+      <div class="video-placeholder" id="localPlaceholder">
+        <svg width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+        </svg>
+        Iniciando câmera...
+      </div>
+      <video id="meuVideo" autoplay playsinline muted></video>
+      <span class="video-label">VOCÊ</span>
+    </div>
+
+    <div class="video-card">
+      <div class="video-placeholder" id="remotePlaceholder">
+        <svg width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+        </svg>
+        Aguardando outra pessoa...
+      </div>
+      <video id="videoRemoto" autoplay playsinline></video>
+      <span class="video-label">REMOTO</span>
+    </div>
+  </div>
+
+  <div class="bottom-bar">
+    <div class="share-box">
+      <span class="share-url" id="shareUrl"></span>
+      <button class="btn-copy" id="btnCopy" onclick="copiarLink()">COPIAR LINK</button>
+    </div>
+    <button class="btn-end" onclick="encerrar()">
+      <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+        <path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/>
+      </svg>
+      Encerrar
+    </button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+  const params   = new URLSearchParams(window.location.search);
+  const salaParm = params.get('sala');
+
+  // Se já tem sala na URL, entra direto
+  if (salaParm) entrarNaSala(salaParm);
+
+  function criarSala() {
+    const sala = Math.random().toString(36).substring(2, 9);
+    const novaUrl = `${location.origin}${location.pathname}?sala=${sala}`;
+    history.pushState({}, '', `?sala=${sala}`);
+    entrarNaSala(sala);
+  }
+
+  function entrarNaSala(sala) {
+    document.getElementById('lobby').style.display = 'none';
+    const cs = document.getElementById('call-screen');
+    cs.style.display = 'flex';
+
+    const url = `${location.origin}${location.pathname}?sala=${sala}`;
+    document.getElementById('shareUrl').textContent = url;
+
+    iniciarChamada(sala);
+  }
+
+  async function iniciarChamada(sala) {
     let meuStream;
 
-    const meuVideo = document.getElementById('meuVideo');
-    const videoRemoto = document.getElementById('videoRemoto');
-
-    // 1. Pega câmera local
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-      .then(stream => {
-        meuStream = stream;
-        meuVideo.srcObject = stream;
-      });
-
-    // 2. Exibe nosso ID gerado pelo PeerJS
-    peer.on('open', id => {
-      document.getElementById('meuId').textContent = id;
-    });
-
-    // 3. Recebe chamada de outra pessoa
-    peer.on('call', call => {
-      call.answer(meuStream); // envia nosso stream
-      call.on('stream', stream => {
-        videoRemoto.srcObject = stream; // exibe stream remoto
-      });
-    });
-
-    // 4. Faz chamada para outra pessoa
-    function ligar() {
-      const idDestino = document.getElementById('idDestino').value;
-      const call = peer.call(idDestino, meuStream);
-      call.on('stream', stream => {
-        videoRemoto.srcObject = stream;
-      });
+    try {
+      meuStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      const mv = document.getElementById('meuVideo');
+      mv.srcObject = meuStream;
+      document.getElementById('localPlaceholder').style.display = 'none';
+    } catch(e) {
+      toast('Não foi possível acessar a câmera.');
+      return;
     }
-  </script>
-</body>
 
+    // Tenta ser peer "a" primeiro; se falhar, vira "b"
+    const idA = `medcam-${sala}-a`;
+    const idB = `medcam-${sala}-b`;
+
+    tentarComoPeerA(idA, idB, meuStream, sala);
+  }
+
+  function tentarComoPeerA(idA, idB, stream, sala) {
+    const peer = new Peer(idA);
+
+    peer.on('open', () => {
+      setStatus('waiting');
+      // Fica ouvindo chamada do peer B
+      peer.on('call', call => {
+        call.answer(stream);
+        call.on('stream', remoteStream => exibirRemoto(remoteStream));
+        call.on('close', () => setStatus('waiting'));
+      });
+
+      // Tenta chamar peer B caso já esteja online
+      setTimeout(() => ligarPara(peer, idB, stream), 1000);
+    });
+
+    peer.on('error', e => {
+      if (e.type === 'unavailable-id') {
+        // ID "a" já em uso → vira peer "b"
+        peer.destroy();
+        tentarComoPeerB(idA, idB, stream);
+      }
+    });
+  }
+
+  function tentarComoPeerB(idA, idB, stream) {
+    const peer = new Peer(idB);
+
+    peer.on('open', () => {
+      setStatus('waiting');
+      // Liga para peer A
+      ligarPara(peer, idA, stream);
+
+      // Também ouve caso A tente ligar de volta
+      peer.on('call', call => {
+        call.answer(stream);
+        call.on('stream', remoteStream => exibirRemoto(remoteStream));
+      });
+    });
+
+    peer.on('error', () => toast('Erro de conexão. Tente recarregar.'));
+  }
+
+  function ligarPara(peer, destinoId, stream) {
+    try {
+      const call = peer.call(destinoId, stream);
+      if (!call) return;
+      call.on('stream', remoteStream => exibirRemoto(remoteStream));
+      call.on('error', () => {});
+    } catch(e) {}
+  }
+
+  function exibirRemoto(stream) {
+    const vr = document.getElementById('videoRemoto');
+    vr.srcObject = stream;
+    document.getElementById('remotePlaceholder').style.display = 'none';
+    setStatus('connected');
+    toast('Conectado!');
+  }
+
+  function setStatus(state) {
+    const badge = document.getElementById('statusBadge');
+    const text  = document.getElementById('statusText');
+    badge.className = `status-badge ${state}`;
+    text.textContent = state === 'connected' ? 'Conectado' : 'Aguardando...';
+  }
+
+  function copiarLink() {
+    const url = document.getElementById('shareUrl').textContent;
+    navigator.clipboard.writeText(url).then(() => {
+      const btn = document.getElementById('btnCopy');
+      btn.textContent = 'COPIADO ✓';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.textContent = 'COPIAR LINK';
+        btn.classList.remove('copied');
+      }, 2000);
+    });
+  }
+
+  function encerrar() {
+    location.href = location.pathname;
+  }
+
+  let toastTimer;
+  function toast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+  }
+</script>
+</body>
 </html>
