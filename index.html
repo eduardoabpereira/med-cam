@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Videochamada</title>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+</head>
+
+<body>
+  <h2>Minha câmera</h2>
+  <video id="meuVideo" autoplay playsinline muted></video>
+
+  <h2>Câmera remota</h2>
+  <video id="videoRemoto" autoplay playsinline></video>
+
+  <br>
+  <p>Meu ID: <strong id="meuId">aguardando...</strong></p>
+  <input id="idDestino" placeholder="ID de quem você quer chamar" />
+  <button onclick="ligar()">📞 Ligar</button>
+
+  <script>
+    const peer = new Peer(); // usa servidor público do PeerJS
+    let meuStream;
+
+    const meuVideo = document.getElementById('meuVideo');
+    const videoRemoto = document.getElementById('videoRemoto');
+
+    // 1. Pega câmera local
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      .then(stream => {
+        meuStream = stream;
+        meuVideo.srcObject = stream;
+      });
+
+    // 2. Exibe nosso ID gerado pelo PeerJS
+    peer.on('open', id => {
+      document.getElementById('meuId').textContent = id;
+    });
+
+    // 3. Recebe chamada de outra pessoa
+    peer.on('call', call => {
+      call.answer(meuStream); // envia nosso stream
+      call.on('stream', stream => {
+        videoRemoto.srcObject = stream; // exibe stream remoto
+      });
+    });
+
+    // 4. Faz chamada para outra pessoa
+    function ligar() {
+      const idDestino = document.getElementById('idDestino').value;
+      const call = peer.call(idDestino, meuStream);
+      call.on('stream', stream => {
+        videoRemoto.srcObject = stream;
+      });
+    }
+  </script>
+</body>
+
+</html>
